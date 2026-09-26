@@ -208,6 +208,10 @@ _G.Setting = {
         false,
         "d_b7"
     },
+    dungeon_v1_elevator_dodge = {
+        false,
+        "d_b8"
+    },
     dungeon_tpspeed = {
         50
     },
@@ -518,6 +522,7 @@ d_b4 = Instance.new("TextButton")
 d_b5 = Instance.new("TextButton")
 d_b6 = Instance.new("TextButton")
 d_b7 = Instance.new("TextButton")
+d_b8 = Instance.new("TextButton")
 d_f1 = Instance.new("TextLabel")
 d_f2 = Instance.new("TextLabel")
 d_f3 = Instance.new("TextLabel")
@@ -5176,6 +5181,22 @@ d_b2.MouseButton1Down:connect(function()
     end
     __("dungeon", _G.d_b2)
 end)
+
+-- Server LIVE Dungeon-compatible V2 dodge for Dungeon V1:
+-- continuously circles the real Elevator at radius 150 / height +100.
+make_together(d_f7, d_b8, vu30, "   Auto Dodge V2 | Elevator Orbit", 0.24)
+d_b8.MouseButton1Down:connect(function()
+    if d_b8.Text ~= "" then
+        d_b8.Text = ""
+        _G.d_b8 = false
+        dungeonV1ElevatorAngle = 0
+    else
+        d_b8.Text = "X"
+        _G.d_b8 = true
+    end
+    __("dungeon_v1_elevator_dodge", _G.d_b8)
+end)
+
 cfrd = {
     - 70,
     70
@@ -5442,7 +5463,53 @@ task.spawn(function()
     end
 end)
 
+local dungeonV1ElevatorAngle = 0
+local DUNGEON_V1_ELEVATOR_RADIUS = 150
+local DUNGEON_V1_ELEVATOR_HEIGHT = 100
+
+-- Exact Auto Dodge V2 elevator orbit used by the Server LIVE Dungeon logic:
+-- workspace.Island -> *(Real)* -> Elevator -> MeshPart, radius 150, +100 Y, -90 deg.
+local function dungeonV1GetElevatorOrbitCFrame()
+    local island = game.Workspace:FindFirstChild("Island")
+    if not island then
+        return nil
+    end
+
+    for _, islandModel in ipairs(island:GetChildren()) do
+        if string.find(islandModel.Name, "%(Real%)", 1, false) then
+            local elevator = islandModel:FindFirstChild("Elevator")
+            local meshPart = elevator and elevator:FindFirstChild("MeshPart")
+
+            if meshPart and meshPart:IsA("BasePart") then
+                dungeonV1ElevatorAngle = dungeonV1ElevatorAngle + 10
+
+                local position = meshPart.Position
+                local y = position.Y + DUNGEON_V1_ELEVATOR_HEIGHT
+                local x = position.X + math.cos(math.rad(dungeonV1ElevatorAngle)) * DUNGEON_V1_ELEVATOR_RADIUS
+                local z = position.Z + math.sin(math.rad(dungeonV1ElevatorAngle)) * DUNGEON_V1_ELEVATOR_RADIUS
+
+                return CFrame.new(x, y, z) * CFrame.Angles(math.rad(-90), 0, 0)
+            end
+        end
+    end
+
+    return nil
+end
+
 local function dungeonV1GetDodgeCFrame(target)
+    -- Optional V1 mode copied from Server LIVE Auto Dodge V2:
+    -- orbit continuously around the real Elevator instead of standing on the NPC.
+    -- This is independent of the current NPC target so the orbit does not stop
+    -- when the target is being replaced/re-spawned.
+    if _("dungeon_v1_elevator_dodge") and _G.inraid then
+        local orbitCF = dungeonV1GetElevatorOrbitCFrame()
+        if orbitCF then
+            return orbitCF
+        end
+    else
+        dungeonV1ElevatorAngle = 0
+    end
+
     local root = target and target:FindFirstChild("HumanoidRootPart")
     if not root then
         return nil
